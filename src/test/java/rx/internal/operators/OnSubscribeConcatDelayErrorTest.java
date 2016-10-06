@@ -33,20 +33,20 @@ public class OnSubscribeConcatDelayErrorTest {
     @Test
     public void mainCompletes() {
         PublishSubject<Integer> source = PublishSubject.create();
-        
+
         TestSubscriber<Integer> ts = TestSubscriber.create();
-        
+
         source.concatMapDelayError(new Func1<Integer, Observable<Integer>>() {
             @Override
             public Observable<Integer> call(Integer v) {
                 return Observable.range(v, 2);
             }
         }).subscribe(ts);
-        
+
         source.onNext(1);
         source.onNext(2);
         source.onCompleted();
-        
+
         ts.assertValues(1, 2, 2, 3);
         ts.assertNoErrors();
         ts.assertCompleted();
@@ -55,29 +55,29 @@ public class OnSubscribeConcatDelayErrorTest {
     @Test
     public void mainErrors() {
         PublishSubject<Integer> source = PublishSubject.create();
-        
+
         TestSubscriber<Integer> ts = TestSubscriber.create();
-        
+
         source.concatMapDelayError(new Func1<Integer, Observable<Integer>>() {
             @Override
             public Observable<Integer> call(Integer v) {
                 return Observable.range(v, 2);
             }
         }).subscribe(ts);
-        
+
         source.onNext(1);
         source.onNext(2);
         source.onError(new TestException());
-        
+
         ts.assertValues(1, 2, 2, 3);
         ts.assertError(TestException.class);
         ts.assertNotCompleted();
     }
-    
+
     @Test
     public void innerErrors() {
         final Observable<Integer> inner = Observable.range(1, 2).concatWith(Observable.<Integer>error(new TestException()));
-        
+
         TestSubscriber<Integer> ts = TestSubscriber.create();
 
         Observable.range(1, 3).concatMapDelayError(new Func1<Integer, Observable<Integer>>() {
@@ -86,7 +86,7 @@ public class OnSubscribeConcatDelayErrorTest {
                 return inner;
             }
         }).subscribe(ts);
-        
+
         ts.assertValues(1, 2, 1, 2, 1, 2);
         ts.assertError(CompositeException.class);
         ts.assertNotCompleted();
@@ -95,7 +95,7 @@ public class OnSubscribeConcatDelayErrorTest {
     @Test
     public void singleInnerErrors() {
         final Observable<Integer> inner = Observable.range(1, 2).concatWith(Observable.<Integer>error(new TestException()));
-        
+
         TestSubscriber<Integer> ts = TestSubscriber.create();
 
         Observable.just(1)
@@ -106,7 +106,7 @@ public class OnSubscribeConcatDelayErrorTest {
                 return inner;
             }
         }).subscribe(ts);
-        
+
         ts.assertValues(1, 2);
         ts.assertError(TestException.class);
         ts.assertNotCompleted();
@@ -124,7 +124,7 @@ public class OnSubscribeConcatDelayErrorTest {
                 return null;
             }
         }).subscribe(ts);
-        
+
         ts.assertNoValues();
         ts.assertError(NullPointerException.class);
         ts.assertNotCompleted();
@@ -142,7 +142,7 @@ public class OnSubscribeConcatDelayErrorTest {
                 throw new TestException();
             }
         }).subscribe(ts);
-        
+
         ts.assertNoValues();
         ts.assertError(TestException.class);
         ts.assertNotCompleted();
@@ -159,7 +159,7 @@ public class OnSubscribeConcatDelayErrorTest {
                 return v == 2 ? Observable.<Integer>empty() : Observable.range(1, 2);
             }
         }).subscribe(ts);
-        
+
         ts.assertValues(1, 2, 1, 2);
         ts.assertNoErrors();
         ts.assertCompleted();
@@ -176,7 +176,7 @@ public class OnSubscribeConcatDelayErrorTest {
                 return v == 2 ? Observable.just(3) : Observable.range(1, 2);
             }
         }).subscribe(ts);
-        
+
         ts.assertValues(1, 2, 3, 1, 2);
         ts.assertNoErrors();
         ts.assertCompleted();
@@ -185,7 +185,7 @@ public class OnSubscribeConcatDelayErrorTest {
     @Test
     public void backpressure() {
         TestSubscriber<Integer> ts = TestSubscriber.create(0);
-        
+
         Observable.range(1, 3).concatMapDelayError(new Func1<Integer, Observable<Integer>>() {
             @Override
             public Observable<Integer> call(Integer v) {
@@ -196,7 +196,7 @@ public class OnSubscribeConcatDelayErrorTest {
         ts.assertNoValues();
         ts.assertNoErrors();
         ts.assertNotCompleted();
-        
+
         ts.requestMore(1);
         ts.assertValues(1);
         ts.assertNoErrors();
@@ -208,7 +208,7 @@ public class OnSubscribeConcatDelayErrorTest {
         ts.assertNotCompleted();
 
         ts.requestMore(2);
-        
+
         ts.assertValues(1, 2, 2, 3, 3, 4);
         ts.assertNoErrors();
         ts.assertCompleted();
@@ -217,67 +217,66 @@ public class OnSubscribeConcatDelayErrorTest {
     static <T> Observable<T> withError(Observable<T> source) {
         return source.concatWith(Observable.<T>error(new TestException()));
     }
-    
+
 
     @Test
     public void concatDelayErrorObservable() {
         TestSubscriber<Integer> ts = TestSubscriber.create();
-        
+
         Observable.concatDelayError(
                 Observable.just(Observable.just(1), Observable.just(2)))
         .subscribe(ts);
-        
+
         ts.assertValues(1, 2);
         ts.assertNoErrors();
         ts.assertCompleted();
     }
-    
+
     @Test
     public void concatDelayErrorObservableError() {
         TestSubscriber<Integer> ts = TestSubscriber.create();
-        
+
         Observable.concatDelayError(
                 withError(Observable.just(withError(Observable.just(1)), withError(Observable.just(2)))))
         .subscribe(ts);
-        
+
         ts.assertValues(1, 2);
         ts.assertError(CompositeException.class);
         ts.assertNotCompleted();
-        
+
         assertEquals(3, ((CompositeException)ts.getOnErrorEvents().get(0)).getExceptions().size());
     }
-    
+
     @SuppressWarnings("unchecked")
     @Test
     public void concatDelayErrorIterable() {
         TestSubscriber<Integer> ts = TestSubscriber.create();
-        
+
         Observable.concatDelayError(
                 Arrays.asList(Observable.just(1), Observable.just(2)))
         .subscribe(ts);
-        
+
         ts.assertValues(1, 2);
         ts.assertNoErrors();
         ts.assertCompleted();
     }
-    
+
     @SuppressWarnings("unchecked")
     @Test
     public void concatDelayErrorIterableError() {
         TestSubscriber<Integer> ts = TestSubscriber.create();
-        
+
         Observable.concatDelayError(
                 Arrays.asList(withError(Observable.just(1)), withError(Observable.just(2))))
         .subscribe(ts);
-        
+
         ts.assertValues(1, 2);
         ts.assertError(CompositeException.class);
         ts.assertNotCompleted();
-        
+
         assertEquals(2, ((CompositeException)ts.getOnErrorEvents().get(0)).getExceptions().size());
     }
 
-    @SuppressWarnings("unchecked")
     @Test
     public void concatDelayError2() {
         TestSubscriber<Integer> ts = TestSubscriber.create();
@@ -292,7 +291,6 @@ public class OnSubscribeConcatDelayErrorTest {
         ts.assertCompleted();
     }
 
-    @SuppressWarnings("unchecked")
     @Test
     public void concatDelayError2Error() {
         TestSubscriber<Integer> ts = TestSubscriber.create();
@@ -309,7 +307,6 @@ public class OnSubscribeConcatDelayErrorTest {
         assertEquals(2, ((CompositeException)ts.getOnErrorEvents().get(0)).getExceptions().size());
     }
 
-    @SuppressWarnings("unchecked")
     @Test
     public void concatDelayError3() {
         TestSubscriber<Integer> ts = TestSubscriber.create();
@@ -325,7 +322,6 @@ public class OnSubscribeConcatDelayErrorTest {
         ts.assertCompleted();
     }
 
-    @SuppressWarnings("unchecked")
     @Test
     public void concatDelayError3Error() {
         TestSubscriber<Integer> ts = TestSubscriber.create();
@@ -343,7 +339,6 @@ public class OnSubscribeConcatDelayErrorTest {
         assertEquals(3, ((CompositeException)ts.getOnErrorEvents().get(0)).getExceptions().size());
     }
 
-    @SuppressWarnings("unchecked")
     @Test
     public void concatDelayError4() {
         TestSubscriber<Integer> ts = TestSubscriber.create();
@@ -360,7 +355,6 @@ public class OnSubscribeConcatDelayErrorTest {
         ts.assertCompleted();
     }
 
-    @SuppressWarnings("unchecked")
     @Test
     public void concatDelayError4Error() {
         TestSubscriber<Integer> ts = TestSubscriber.create();
@@ -379,7 +373,6 @@ public class OnSubscribeConcatDelayErrorTest {
         assertEquals(4, ((CompositeException)ts.getOnErrorEvents().get(0)).getExceptions().size());
     }
 
-    @SuppressWarnings("unchecked")
     @Test
     public void concatDelayError5() {
         TestSubscriber<Integer> ts = TestSubscriber.create();
@@ -397,7 +390,6 @@ public class OnSubscribeConcatDelayErrorTest {
         ts.assertCompleted();
     }
 
-    @SuppressWarnings("unchecked")
     @Test
     public void concatDelayError5Error() {
         TestSubscriber<Integer> ts = TestSubscriber.create();
@@ -417,7 +409,6 @@ public class OnSubscribeConcatDelayErrorTest {
         assertEquals(5, ((CompositeException)ts.getOnErrorEvents().get(0)).getExceptions().size());
     }
 
-    @SuppressWarnings("unchecked")
     @Test
     public void concatDelayError6() {
         TestSubscriber<Integer> ts = TestSubscriber.create();
@@ -436,7 +427,6 @@ public class OnSubscribeConcatDelayErrorTest {
         ts.assertCompleted();
     }
 
-    @SuppressWarnings("unchecked")
     @Test
     public void concatDelayError6Error() {
         TestSubscriber<Integer> ts = TestSubscriber.create();
@@ -457,7 +447,6 @@ public class OnSubscribeConcatDelayErrorTest {
         assertEquals(6, ((CompositeException)ts.getOnErrorEvents().get(0)).getExceptions().size());
     }
 
-    @SuppressWarnings("unchecked")
     @Test
     public void concatDelayError7() {
         TestSubscriber<Integer> ts = TestSubscriber.create();
@@ -477,7 +466,6 @@ public class OnSubscribeConcatDelayErrorTest {
         ts.assertCompleted();
     }
 
-    @SuppressWarnings("unchecked")
     @Test
     public void concatDelayError7Error() {
         TestSubscriber<Integer> ts = TestSubscriber.create();
@@ -499,7 +487,6 @@ public class OnSubscribeConcatDelayErrorTest {
         assertEquals(7, ((CompositeException)ts.getOnErrorEvents().get(0)).getExceptions().size());
     }
 
-    @SuppressWarnings("unchecked")
     @Test
     public void concatDelayError8() {
         TestSubscriber<Integer> ts = TestSubscriber.create();
@@ -521,7 +508,6 @@ public class OnSubscribeConcatDelayErrorTest {
         ts.assertCompleted();
     }
 
-    @SuppressWarnings("unchecked")
     @Test
     public void concatDelayError8Error() {
         TestSubscriber<Integer> ts = TestSubscriber.create();
@@ -544,7 +530,6 @@ public class OnSubscribeConcatDelayErrorTest {
         assertEquals(8, ((CompositeException)ts.getOnErrorEvents().get(0)).getExceptions().size());
     }
 
-    @SuppressWarnings("unchecked")
     @Test
     public void concatDelayError9() {
         TestSubscriber<Integer> ts = TestSubscriber.create();
@@ -567,7 +552,6 @@ public class OnSubscribeConcatDelayErrorTest {
         ts.assertCompleted();
     }
 
-    @SuppressWarnings("unchecked")
     @Test
     public void concatDelayError9Error() {
         TestSubscriber<Integer> ts = TestSubscriber.create();

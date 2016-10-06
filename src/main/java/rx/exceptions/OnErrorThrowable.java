@@ -1,12 +1,12 @@
 /**
  * Copyright 2014 Netflix, Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -86,7 +86,7 @@ public final class OnErrorThrowable extends RuntimeException {
     /**
      * Adds the given item as the final cause of the given {@code Throwable}, wrapped in {@code OnNextValue}
      * (which extends {@code RuntimeException}).
-     * 
+     *
      * @param e
      *          the {@link Throwable} to which you want to add a cause
      * @param value
@@ -119,10 +119,10 @@ public final class OnErrorThrowable extends RuntimeException {
         private static final long serialVersionUID = -3454462756050397899L;
 
         private final Object value;
-        
-        // Lazy loaded singleton 
+
+        // Lazy loaded singleton
         static final class Primitives {
-            
+
             static final Set<Class<?>> INSTANCE = create();
 
             private static Set<Class<?>> create() {
@@ -135,7 +135,7 @@ public final class OnErrorThrowable extends RuntimeException {
                 set.add(Long.class);
                 set.add(Float.class);
                 set.add(Double.class);
-                // Void is another primitive but cannot be instantiated 
+                // Void is another primitive but cannot be instantiated
                 // and is caught by the null check in renderValue
                 return set;
             }
@@ -168,14 +168,14 @@ public final class OnErrorThrowable extends RuntimeException {
          *
          * If a specific behavior has been defined in the {@link RxJavaErrorHandler} plugin, some types
          * may also have a specific rendering. Non-primitive types not managed by the plugin are rendered
-         * as the classname of the object.
+         * as the class name of the object.
          * <p>
          * See PR #1401 and Issue #2468 for details.
          *
          * @param value
          *        the item that the Observable was trying to emit at the time of the exception
          * @return a string version of the object if primitive or managed through error plugin,
-         *        otherwise the classname of the object
+         *        otherwise the class name of the object
          */
         static String renderValue(Object value){
             if (value == null) {

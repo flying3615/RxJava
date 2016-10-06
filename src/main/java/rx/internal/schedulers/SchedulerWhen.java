@@ -1,12 +1,12 @@
 /**
  * Copyright 2016 Netflix, Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -20,9 +20,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import rx.Completable;
-import rx.Completable.CompletableOnSubscribe;
-import rx.Completable.CompletableSubscriber;
-import rx.Scheduler.Worker;
+import rx.Completable.OnSubscribe;
+import rx.CompletableSubscriber;
 import rx.Observable;
 import rx.Observer;
 import rx.Scheduler;
@@ -54,16 +53,16 @@ import rx.subscriptions.Subscriptions;
  * Finally the actions scheduled on the parent {@link Scheduler} when the inner
  * most {@link Completable}s are subscribed to.
  * <p>
- * When the {@link Worker} is unsubscribed the {@link Completable} emits an
+ * When the {@link rx.Scheduler.Worker} is unsubscribed the {@link Completable} emits an
  * onComplete and triggers any behavior in the flattening operator. The
  * {@link Observable} and all {@link Completable}s give to the flattening
  * function never onError.
  * <p>
  * Limit the amount concurrency two at a time without creating a new fix size
  * thread pool:
- * 
+ *
  * <pre>
- * Scheduler limitSched = Schedulers.computation().when(workers -> {
+ * Scheduler limitScheduler = Schedulers.computation().when(workers -> {
  * 	// use merge max concurrent to limit the number of concurrent
  * 	// callbacks two at a time
  * 	return Completable.merge(Observable.merge(workers), 2);
@@ -72,29 +71,29 @@ import rx.subscriptions.Subscriptions;
  * <p>
  * This is a slightly different way to limit the concurrency but it has some
  * interesting benefits and drawbacks to the method above. It works by limited
- * the number of concurrent {@link Worker}s rather than individual actions.
- * Generally each {@link Observable} uses its own {@link Worker}. This means
+ * the number of concurrent {@link rx.Scheduler.Worker}s rather than individual actions.
+ * Generally each {@link Observable} uses its own {@link rx.Scheduler.Worker}. This means
  * that this will essentially limit the number of concurrent subscribes. The
  * danger comes from using operators like
  * {@link Observable#zip(Observable, Observable, rx.functions.Func2)} where
  * subscribing to the first {@link Observable} could deadlock the subscription
  * to the second.
- * 
+ *
  * <pre>
- * Scheduler limitSched = Schedulers.computation().when(workers -> {
+ * Scheduler limitScheduler = Schedulers.computation().when(workers -> {
  * 	// use merge max concurrent to limit the number of concurrent
  * 	// Observables two at a time
  * 	return Completable.merge(Observable.merge(workers, 2));
  * });
  * </pre>
- * 
+ *
  * Slowing down the rate to no more than than 1 a second. This suffers from the
  * same problem as the one above I could find an {@link Observable} operator
  * that limits the rate without dropping the values (aka leaky bucket
  * algorithm).
- * 
+ *
  * <pre>
- * Scheduler slowSched = Schedulers.computation().when(workers -> {
+ * Scheduler slowScheduler = Schedulers.computation().when(workers -> {
  * 	// use concatenate to make each worker happen one at a time.
  * 	return Completable.concat(workers.map(actions -> {
  * 		// delay the starting of the next worker by 1 second.
@@ -102,9 +101,6 @@ import rx.subscriptions.Subscriptions;
  * 	}));
  * });
  * </pre>
- * 
- * @param combine
- * @return
  */
 @Experimental
 public class SchedulerWhen extends Scheduler implements Subscription {
@@ -143,7 +139,7 @@ public class SchedulerWhen extends Scheduler implements Subscription {
 		Observable<Completable> actions = actionSubject.map(new Func1<ScheduledAction, Completable>() {
 			@Override
 			public Completable call(final ScheduledAction action) {
-				return Completable.create(new CompletableOnSubscribe() {
+				return Completable.create(new OnSubscribe() {
 					@Override
 					public void call(CompletableSubscriber actionCompletable) {
 						actionCompletable.onSubscribe(action);
@@ -197,7 +193,7 @@ public class SchedulerWhen extends Scheduler implements Subscription {
 		return worker;
 	}
 
-	private static final Subscription SUBSCRIBED = new Subscription() {
+	static final Subscription SUBSCRIBED = new Subscription() {
 		@Override
 		public void unsubscribe() {
 		}
@@ -208,7 +204,7 @@ public class SchedulerWhen extends Scheduler implements Subscription {
 		}
 	};
 
-	private static final Subscription UNSUBSCRIBED = Subscriptions.unsubscribed();
+	static final Subscription UNSUBSCRIBED = Subscriptions.unsubscribed();
 
 	@SuppressWarnings("serial")
 	private static abstract class ScheduledAction extends AtomicReference<Subscription> implements Subscription {
@@ -216,7 +212,7 @@ public class SchedulerWhen extends Scheduler implements Subscription {
 			super(SUBSCRIBED);
 		}
 
-		private final void call(Worker actualWorker) {
+		private void call(Worker actualWorker) {
 			Subscription oldState = get();
 			// either SUBSCRIBED or UNSUBSCRIBED
 			if (oldState == UNSUBSCRIBED) {

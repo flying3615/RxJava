@@ -1,12 +1,12 @@
 /**
  * Copyright 2016 Netflix, Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -28,21 +28,22 @@ import rx.internal.util.unsafe.*;
 import rx.plugins.RxJavaHooks;
 import rx.subscriptions.SerialSubscription;
 
-public final class OnSubscribeFromAsync<T> implements OnSubscribe<T> {
+@Deprecated
+public final class OnSubscribeFromAsyncEmitter<T> implements OnSubscribe<T> {
 
     final Action1<AsyncEmitter<T>> asyncEmitter;
-    
+
     final AsyncEmitter.BackpressureMode backpressure;
-    
-    public OnSubscribeFromAsync(Action1<AsyncEmitter<T>> asyncEmitter, AsyncEmitter.BackpressureMode backpressure) {
+
+    public OnSubscribeFromAsyncEmitter(Action1<AsyncEmitter<T>> asyncEmitter, AsyncEmitter.BackpressureMode backpressure) {
         this.asyncEmitter = asyncEmitter;
         this.backpressure = backpressure;
     }
-    
+
     @Override
     public void call(Subscriber<? super T> t) {
         BaseAsyncEmitter<T> emitter;
-        
+
         switch (backpressure) {
         case NONE: {
             emitter = new NoneAsyncEmitter<T>(t);
@@ -69,25 +70,28 @@ public final class OnSubscribeFromAsync<T> implements OnSubscribe<T> {
         t.add(emitter);
         t.setProducer(emitter);
         asyncEmitter.call(emitter);
-        
+
     }
-    
-    static final class CancellableSubscription 
+
+    /**
+     * A Subscription that wraps an AsyncEmitter.Cancellable instance.
+     */
+    static final class CancellableSubscription
     extends AtomicReference<AsyncEmitter.Cancellable>
     implements Subscription {
-        
+
         /** */
         private static final long serialVersionUID = 5718521705281392066L;
 
         public CancellableSubscription(AsyncEmitter.Cancellable cancellable) {
             super(cancellable);
         }
-        
+
         @Override
         public boolean isUnsubscribed() {
             return get() == null;
         }
-        
+
         @Override
         public void unsubscribe() {
             if (get() != null) {
@@ -103,15 +107,15 @@ public final class OnSubscribeFromAsync<T> implements OnSubscribe<T> {
             }
         }
     }
-    
-    static abstract class BaseAsyncEmitter<T> 
+
+    static abstract class BaseAsyncEmitter<T>
     extends AtomicLong
     implements AsyncEmitter<T>, Producer, Subscription {
         /** */
         private static final long serialVersionUID = 7326289992464377023L;
 
         final Subscriber<? super T> actual;
-        
+
         final SerialSubscription serial;
 
         public BaseAsyncEmitter(Subscriber<? super T> actual) {
@@ -148,7 +152,7 @@ public final class OnSubscribeFromAsync<T> implements OnSubscribe<T> {
             serial.unsubscribe();
             onUnsubscribed();
         }
-        
+
         void onUnsubscribed() {
             // default is no-op
         }
@@ -169,7 +173,7 @@ public final class OnSubscribeFromAsync<T> implements OnSubscribe<T> {
         void onRequested() {
             // default is no-op
         }
-        
+
         @Override
         public final void setSubscription(Subscription s) {
             serial.set(s);
@@ -185,7 +189,7 @@ public final class OnSubscribeFromAsync<T> implements OnSubscribe<T> {
             return get();
         }
     }
-    
+
     static final class NoneAsyncEmitter<T> extends BaseAsyncEmitter<T> {
 
         /** */
@@ -202,7 +206,7 @@ public final class OnSubscribeFromAsync<T> implements OnSubscribe<T> {
             }
 
             actual.onNext(t);
-            
+
             for (;;) {
                 long r = get();
                 if (r == 0L || compareAndSet(r, r - 1)) {
@@ -212,7 +216,7 @@ public final class OnSubscribeFromAsync<T> implements OnSubscribe<T> {
         }
 
     }
-    
+
     static abstract class NoOverflowBaseAsyncEmitter<T> extends BaseAsyncEmitter<T> {
 
         /** */
@@ -223,7 +227,7 @@ public final class OnSubscribeFromAsync<T> implements OnSubscribe<T> {
         }
 
         @Override
-        public final void onNext(T t) {
+        public void onNext(T t) {
             if (actual.isUnsubscribed()) {
                 return;
             }
@@ -235,10 +239,10 @@ public final class OnSubscribeFromAsync<T> implements OnSubscribe<T> {
                 onOverflow();
             }
         }
-        
+
         abstract void onOverflow();
     }
-    
+
     static final class DropAsyncEmitter<T> extends NoOverflowBaseAsyncEmitter<T> {
 
         /** */
@@ -252,7 +256,7 @@ public final class OnSubscribeFromAsync<T> implements OnSubscribe<T> {
         void onOverflow() {
             // nothing to do
         }
-        
+
     }
 
     static final class ErrorAsyncEmitter<T> extends NoOverflowBaseAsyncEmitter<T> {
@@ -260,46 +264,76 @@ public final class OnSubscribeFromAsync<T> implements OnSubscribe<T> {
         /** */
         private static final long serialVersionUID = 338953216916120960L;
 
+        private boolean done;
+
         public ErrorAsyncEmitter(Subscriber<? super T> actual) {
             super(actual);
         }
 
+
+        @Override
+        public void onNext(T t) {
+            if (done) {
+                return;
+            }
+            super.onNext(t);
+        }
+
+
+        @Override
+        public void onCompleted() {
+            if (done) {
+                return;
+            }
+            done = true;
+            super.onCompleted();
+        }
+
+
+        @Override
+        public void onError(Throwable e) {
+            if (done) {
+                RxJavaHooks.onError(e);
+                return;
+            }
+            done = true;
+            super.onError(e);
+        }
+
+
         @Override
         void onOverflow() {
-            onError(new MissingBackpressureException("fromAsync: could not emit value due to lack of requests"));
+            onError(new MissingBackpressureException("fromEmitter: could not emit value due to lack of requests"));
         }
-        
+
     }
-    
+
     static final class BufferAsyncEmitter<T> extends BaseAsyncEmitter<T> {
 
         /** */
         private static final long serialVersionUID = 2427151001689639875L;
 
         final Queue<Object> queue;
-        
+
         Throwable error;
         volatile boolean done;
-        
+
         final AtomicInteger wip;
-        
-        final NotificationLite<T> nl;
-        
+
         public BufferAsyncEmitter(Subscriber<? super T> actual, int capacityHint) {
             super(actual);
-            this.queue = UnsafeAccess.isUnsafeAvailable() 
+            this.queue = UnsafeAccess.isUnsafeAvailable()
                     ? new SpscUnboundedArrayQueue<Object>(capacityHint)
                     : new SpscUnboundedAtomicArrayQueue<Object>(capacityHint);
             this.wip = new AtomicInteger();
-            this.nl = NotificationLite.instance();
         }
 
         @Override
         public void onNext(T t) {
-            queue.offer(nl.next(t));
+            queue.offer(NotificationLite.next(t));
             drain();
         }
-        
+
         @Override
         public void onError(Throwable e) {
             error = e;
@@ -312,7 +346,7 @@ public final class OnSubscribeFromAsync<T> implements OnSubscribe<T> {
             done = true;
             drain();
         }
-        
+
         @Override
         void onRequested() {
             drain();
@@ -324,32 +358,32 @@ public final class OnSubscribeFromAsync<T> implements OnSubscribe<T> {
                 queue.clear();
             }
         }
-        
+
         void drain() {
             if (wip.getAndIncrement() != 0) {
                 return;
             }
-            
+
             int missed = 1;
             final Subscriber<? super T> a = actual;
             final Queue<Object> q = queue;
-            
+
             for (;;) {
                 long r = get();
                 long e = 0L;
-                
+
                 while (e != r) {
                     if (a.isUnsubscribed()) {
                         q.clear();
                         return;
                     }
-                    
+
                     boolean d = done;
-                    
+
                     Object o = q.poll();
-                    
+
                     boolean empty = o == null;
-                    
+
                     if (d && empty) {
                         Throwable ex = error;
                         if (ex != null) {
@@ -359,26 +393,26 @@ public final class OnSubscribeFromAsync<T> implements OnSubscribe<T> {
                         }
                         return;
                     }
-                    
+
                     if (empty) {
                         break;
                     }
-                    
-                    a.onNext(nl.getValue(o));
-                    
+
+                    a.onNext(NotificationLite.<T>getValue(o));
+
                     e++;
                 }
-                
+
                 if (e == r) {
                     if (a.isUnsubscribed()) {
                         q.clear();
                         return;
                     }
-                    
+
                     boolean d = done;
-                    
+
                     boolean empty = q.isEmpty();
-                    
+
                     if (d && empty) {
                         Throwable ex = error;
                         if (ex != null) {
@@ -389,11 +423,11 @@ public final class OnSubscribeFromAsync<T> implements OnSubscribe<T> {
                         return;
                     }
                 }
-                
+
                 if (e != 0) {
                     BackpressureUtils.produced(this, e);
                 }
-                
+
                 missed = wip.addAndGet(-missed);
                 if (missed == 0) {
                     break;
@@ -411,24 +445,21 @@ public final class OnSubscribeFromAsync<T> implements OnSubscribe<T> {
 
         Throwable error;
         volatile boolean done;
-        
+
         final AtomicInteger wip;
-        
-        final NotificationLite<T> nl;
-        
+
         public LatestAsyncEmitter(Subscriber<? super T> actual) {
             super(actual);
             this.queue = new AtomicReference<Object>();
             this.wip = new AtomicInteger();
-            this.nl = NotificationLite.instance();
         }
 
         @Override
         public void onNext(T t) {
-            queue.set(nl.next(t));
+            queue.set(NotificationLite.next(t));
             drain();
         }
-        
+
         @Override
         public void onError(Throwable e) {
             error = e;
@@ -441,7 +472,7 @@ public final class OnSubscribeFromAsync<T> implements OnSubscribe<T> {
             done = true;
             drain();
         }
-        
+
         @Override
         void onRequested() {
             drain();
@@ -453,32 +484,32 @@ public final class OnSubscribeFromAsync<T> implements OnSubscribe<T> {
                 queue.lazySet(null);
             }
         }
-        
+
         void drain() {
             if (wip.getAndIncrement() != 0) {
                 return;
             }
-            
+
             int missed = 1;
             final Subscriber<? super T> a = actual;
             final AtomicReference<Object> q = queue;
-            
+
             for (;;) {
                 long r = get();
                 long e = 0L;
-                
+
                 while (e != r) {
                     if (a.isUnsubscribed()) {
                         q.lazySet(null);
                         return;
                     }
-                    
+
                     boolean d = done;
-                    
+
                     Object o = q.getAndSet(null);
-                    
+
                     boolean empty = o == null;
-                    
+
                     if (d && empty) {
                         Throwable ex = error;
                         if (ex != null) {
@@ -488,26 +519,26 @@ public final class OnSubscribeFromAsync<T> implements OnSubscribe<T> {
                         }
                         return;
                     }
-                    
+
                     if (empty) {
                         break;
                     }
-                    
-                    a.onNext(nl.getValue(o));
-                    
+
+                    a.onNext(NotificationLite.<T>getValue(o));
+
                     e++;
                 }
-                
+
                 if (e == r) {
                     if (a.isUnsubscribed()) {
                         q.lazySet(null);
                         return;
                     }
-                    
+
                     boolean d = done;
-                    
+
                     boolean empty = q.get() == null;
-                    
+
                     if (d && empty) {
                         Throwable ex = error;
                         if (ex != null) {
@@ -518,11 +549,11 @@ public final class OnSubscribeFromAsync<T> implements OnSubscribe<T> {
                         return;
                     }
                 }
-                
+
                 if (e != 0) {
                     BackpressureUtils.produced(this, e);
                 }
-                
+
                 missed = wip.addAndGet(-missed);
                 if (missed == 0) {
                     break;

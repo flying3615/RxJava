@@ -39,9 +39,9 @@ public class SingleTest {
 
     @SuppressWarnings("rawtypes")
     private Func1<Single.OnSubscribe, Single.OnSubscribe> onCreate;
-    
+
     @SuppressWarnings("rawtypes")
-    private Func2<Single, Observable.OnSubscribe, Observable.OnSubscribe> onStart;
+    private Func2<Single, Single.OnSubscribe, Single.OnSubscribe> onStart;
 
     private Func1<Subscription, Subscription> onReturn;
 
@@ -54,28 +54,28 @@ public class SingleTest {
                 return t;
             }
         });
-        
+
         RxJavaHooks.setOnSingleCreate(onCreate);
-        
-        onStart = spy(new Func2<Single, Observable.OnSubscribe, Observable.OnSubscribe>() {
+
+        onStart = spy(new Func2<Single, Single.OnSubscribe, Single.OnSubscribe>() {
             @Override
-            public Observable.OnSubscribe call(Single t1, Observable.OnSubscribe t2) {
+            public Single.OnSubscribe call(Single t1, Single.OnSubscribe t2) {
                 return t2;
             }
         });
-        
+
         RxJavaHooks.setOnSingleStart(onStart);
-        
+
         onReturn = spy(new Func1<Subscription, Subscription>() {
             @Override
             public Subscription call(Subscription t) {
                 return t;
             }
         });
-        
+
         RxJavaHooks.setOnSingleReturn(onReturn);
     }
-    
+
     @After
     public void after() {
         RxJavaHooks.reset();
@@ -445,7 +445,7 @@ public class SingleTest {
         });
         single.subscribe(ts);
 
-        verify(onStart, times(1)).call(eq(single), any(Observable.OnSubscribe.class));
+        verify(onStart, times(1)).call(eq(single), any(Single.OnSubscribe.class));
     }
 
     @Test
@@ -458,7 +458,7 @@ public class SingleTest {
         });
         single.unsafeSubscribe(ts);
 
-        verify(onStart, times(1)).call(eq(single), any(Observable.OnSubscribe.class));
+        verify(onStart, times(1)).call(eq(single), any(Single.OnSubscribe.class));
     }
 
     @Test
@@ -869,6 +869,11 @@ public class SingleTest {
         testSubscriber.assertNotCompleted();
     }
 
+    @Test(expected = IllegalArgumentException.class)
+    public void doOnErrorNull() {
+        Single.just(1).doOnError(null);
+    }
+
     @Test
     public void doOnErrorShouldNotCallActionIfNoErrorHasOccurred() {
         @SuppressWarnings("unchecked")
@@ -972,6 +977,11 @@ public class SingleTest {
         testSubscriber.assertError(error);
 
         verify(callable).call();
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void doOnSuccessNull() {
+        Single.just(1).doOnSuccess(null);
     }
 
     @Test
@@ -1969,7 +1979,7 @@ public class SingleTest {
     @Test
     public void unsubscribeComposesThrough() {
         PublishSubject<Integer> ps = PublishSubject.create();
-        
+
         Subscription s = ps.toSingle()
         .flatMap(new Func1<Integer, Single<Integer>>() {
             @Override
@@ -1978,16 +1988,16 @@ public class SingleTest {
             }
         })
         .subscribe();
-        
+
         s.unsubscribe();
-        
+
         assertFalse("Observers present?!", ps.hasObservers());
     }
 
     @Test(timeout = 1000)
     public void unsubscribeComposesThroughAsync() {
         PublishSubject<Integer> ps = PublishSubject.create();
-        
+
         Subscription s = ps.toSingle()
         .subscribeOn(Schedulers.io())
         .flatMap(new Func1<Integer, Single<Integer>>() {
@@ -1997,11 +2007,11 @@ public class SingleTest {
             }
         })
         .subscribe();
-        
+
         while (!ps.hasObservers() && !Thread.currentThread().isInterrupted()) ;
-        
+
         s.unsubscribe();
-        
+
         assertFalse("Observers present?!", ps.hasObservers());
     }
 
@@ -2068,5 +2078,62 @@ public class SingleTest {
         }).subscribe(testSubscriber);
 
         testSubscriber.assertError(UnsupportedOperationException.class);
+    }
+
+    @Test public void toFunctionReceivesObservableReturnsResult() {
+        Single<String> s = Single.just("Hi");
+
+        final Object expectedResult = new Object();
+        final AtomicReference<Single<?>> singleRef = new AtomicReference<Single<?>>();
+        Object actualResult = s.to(new Func1<Single<String>, Object>() {
+            @Override
+            public Object call(Single<String> single) {
+                singleRef.set(single);
+                return expectedResult;
+            }
+        });
+
+        assertSame(expectedResult, actualResult);
+        assertSame(s, singleRef.get());
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void doOnEachNull() {
+        Single.just(1).doOnEach(null);
+    }
+
+    @Test
+    public void doOnEachError() {
+        final AtomicInteger atomicInteger = new AtomicInteger(0);
+        Single.error(new RuntimeException()).doOnEach(new Action1<Notification<?>>() {
+            @Override
+            public void call(final Notification<?> notification) {
+                if (notification.isOnError()) {
+                    atomicInteger.incrementAndGet();
+                }
+            }
+        }).subscribe(Actions.empty(), new Action1<Throwable>() {
+            @Override
+            public void call(final Throwable throwable) {
+                // Do nothing this is expected.
+            }
+        });
+
+        assertEquals(1, atomicInteger.get());
+    }
+
+    @Test
+    public void doOnEachSuccess() {
+        final AtomicInteger atomicInteger = new AtomicInteger(0);
+        Single.just(1).doOnEach(new Action1<Notification<? extends Integer>>() {
+            @Override
+            public void call(final Notification<? extends Integer> notification) {
+                if (notification.isOnNext()) {
+                    atomicInteger.getAndAdd(notification.getValue());
+                }
+            }
+        }).subscribe();
+
+        assertEquals(1, atomicInteger.get());
     }
 }
